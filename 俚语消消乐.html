@@ -1,0 +1,403 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>俚语消消乐</title>
+    <style>
+        body {
+            font-family: 'Microsoft YaHei', Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #e8f5e9; /* Light green background */
+            color: #333;
+            overflow: hidden;
+        }
+        .header {
+            text-align: center;
+            padding: 20px 0;
+            background-color: #4caf50;
+            color: white;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+        }
+        .header h1 {
+            margin: 0;
+            font-size: 36px;
+        }
+        .game-container {
+            width: 100%;
+            height: calc(100vh - 180px);
+            position: relative;
+            overflow: hidden;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+        .bubble {
+            position: absolute;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            cursor: pointer;
+            font-weight: bold;
+            box-shadow: inset 0 -3px 10px rgba(0,0,0,0.2), 
+                        inset 0 3px 10px rgba(255,255,255,0.4),
+                        0 5px 15px rgba(0,0,0,0.2);
+            transition: all 0.3s;
+            padding: 10px;
+            word-break: break-word;
+            user-select: none;
+        }
+        .bubble:hover {
+            transform: scale(1.05);
+        }
+        .bubble.selected {
+            transform: scale(1.1);
+            box-shadow: inset 0 -3px 10px rgba(0,0,0,0.2), 
+                        inset 0 3px 10px rgba(255,255,255,0.4),
+                        0 0 0 3px #4caf50,
+                        0 5px 15px rgba(0,0,0,0.2);
+        }
+        .bubble.english {
+            background: linear-gradient(135deg, #ffeb3b, #ffc107); /* Yellow gradient */
+            color: #795548;
+        }
+        .bubble.chinese {
+            background: linear-gradient(135deg, #ff80ab, #f50057); /* Pink gradient */
+            color: white;
+        }
+        .bubble.matched {
+            animation: pop 0.5s forwards;
+        }
+        @keyframes pop {
+            0% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(1.2); opacity: 0.7; }
+            100% { transform: scale(0); opacity: 0; }
+        }
+        .controls {
+            text-align: center;
+            padding: 20px;
+            background-color: #4caf50;
+        }
+        button {
+            padding: 12px 24px;
+            background-color: #2e7d32;
+            color: white;
+            border: none;
+            border-radius: 30px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: bold;
+            box-shadow: 0 3px 6px rgba(0,0,0,0.2);
+            transition: all 0.3s;
+        }
+        button:hover {
+            background-color: #1b5e20;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 10px rgba(0,0,0,0.2);
+        }
+        .stats {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background-color: rgba(255,255,255,0.8);
+            padding: 10px 15px;
+            border-radius: 20px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            z-index: 100;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>俚语消消乐</h1>
+    </div>
+    
+    <div class="stats">
+        已配对: <span id="matched-count">0</span> / <span id="total-count">12</span>
+    </div>
+    
+    <div class="game-container" id="game-board">
+        <!-- 泡泡将通过JavaScript动态添加 -->
+    </div>
+    
+    <div class="controls">
+        <button onclick="resetGame()">重置游戏</button>
+    </div>
+    
+    <script>
+        // 游戏数据 - 中西俚语
+        const slangPairs = [
+            { chinese: "烫手山芋", western: "Hot potato", meaning: "棘手的问题/难对付的人" },
+            { chinese: "网虫", western: "Mouse potato", meaning: "沉迷网络无法自拔的人" },
+            { chinese: "大人物", western: "Big potato", meaning: "重要人物" },
+            { chinese: "小角色", western: "Small potato", meaning: "不重要的人" },
+            { chinese: "镇定自若", western: "As cool as a cucumber", meaning: "非常冷静" },
+            { chinese: "蠢材", western: "Bean brain", meaning: "没脑筋的人" },
+            { chinese: "充满能量", western: "Full of beans", meaning: "精力充沛" },
+            { chinese: "耐心点", western: "Hold your horses", meaning: "等一会儿" },
+            { chinese: "今天就到这", western: "Call it a day", meaning: "结束一天的工作" },
+            { chinese: "注定完蛋", western: "Dead duck", meaning: "没有希望了" },
+            { chinese: "试一下", western: "Give it a shot", meaning: "尝试一下" },
+            { chinese: "两码事", western: "Apples and oranges", meaning: "完全不同的事物" },
+            { chinese: "青葱岁月", western: "Salad days", meaning: "年少轻狂的时光" },
+            { chinese: "身体不适", western: "Feeling under the weather", meaning: "感觉不舒服" },
+            { chinese: "吃醋", western: "Jealous", meaning: "嫉妒" },
+            { chinese: "吹牛", western: "Boast", meaning: "夸口" },
+            { chinese: "拍马屁", western: "Flatter", meaning: "奉承" },
+            { chinese: "给力", western: "Awesome", meaning: "很棒" }
+        ];
+        
+        // 游戏变量
+        let selectedBubbles = [];
+        let matchedPairs = 0;
+        let totalPairs = 0;
+        let bubbles = [];
+        let isDragging = false;
+        let dragBubble = null;
+        let dragOffsetX = 0;
+        let dragOffsetY = 0;
+        
+        // 检查泡泡是否重叠
+        function isOverlapping(newBubble, existingBubbles) {
+            const padding = 10; // 泡泡之间的最小间距
+            for (const bubble of existingBubbles) {
+                const dx = newBubble.x - bubble.x;
+                const dy = newBubble.y - bubble.y;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+                if (distance < (newBubble.size + bubble.size) / 2 + padding) {
+                    return true;
+                }
+            }
+            return false;
+        }
+        
+        // 初始化游戏
+        function initGame() {
+            const gameBoard = document.getElementById('game-board');
+            gameBoard.innerHTML = '';
+            
+            // 随机选择12对俚语
+            const shuffledPairs = [...slangPairs].sort(() => Math.random() - 0.5).slice(0, 12);
+            totalPairs = shuffledPairs.length;
+            
+            // 创建泡泡数组
+            bubbles = [];
+            shuffledPairs.forEach(pair => {
+                bubbles.push({
+                    text: pair.chinese,
+                    pairId: pair.western,
+                    type: 'chinese',
+                    meaning: pair.meaning
+                });
+                bubbles.push({
+                    text: pair.western,
+                    pairId: pair.western,
+                    type: 'english',
+                    meaning: pair.meaning
+                });
+            });
+            
+            // 随机排序泡泡
+            bubbles = bubbles.sort(() => Math.random() - 0.5);
+            
+            // 创建泡泡元素
+            const gameWidth = gameBoard.clientWidth;
+            const gameHeight = gameBoard.clientHeight;
+            const bubbleSize = 70; // 固定泡泡大小
+            
+            // 存储已放置泡泡的位置
+            const placedBubbles = [];
+            
+            bubbles.forEach((bubble, index) => {
+                const bubbleElement = document.createElement('div');
+                bubbleElement.className = `bubble ${bubble.type}`;
+                bubbleElement.textContent = bubble.text;
+                bubbleElement.dataset.index = index;
+                bubbleElement.dataset.pairId = bubble.pairId;
+                bubbleElement.dataset.type = bubble.type;
+                bubbleElement.dataset.meaning = bubble.meaning;
+                
+                // 设置泡泡大小
+                bubbleElement.style.width = `${bubbleSize}px`;
+                bubbleElement.style.height = `${bubbleSize}px`;
+                bubbleElement.style.fontSize = `${Math.max(12, bubbleSize / 5)}px`;
+                
+                // 寻找不重叠的位置
+                let x, y;
+                let attempts = 0;
+                const maxAttempts = 100;
+                
+                do {
+                    x = Math.random() * (gameWidth - bubbleSize);
+                    y = Math.random() * (gameHeight - bubbleSize);
+                    attempts++;
+                    
+                    if (attempts >= maxAttempts) {
+                        // 如果尝试太多次仍然找不到位置，强制放置并可能重叠
+                        break;
+                    }
+                } while (isOverlapping(
+                    {x: x + bubbleSize/2, y: y + bubbleSize/2, size: bubbleSize},
+                    placedBubbles
+                ));
+                
+                // 记录已放置泡泡的位置
+                placedBubbles.push({
+                    x: x + bubbleSize/2,
+                    y: y + bubbleSize/2,
+                    size: bubbleSize
+                });
+                
+                bubbleElement.style.left = `${x}px`;
+                bubbleElement.style.top = `${y}px`;
+                
+                // 点击事件
+                bubbleElement.addEventListener('click', (e) => {
+                    if (isDragging) return; // 如果正在拖拽，不处理点击
+                    selectBubble(bubbleElement);
+                });
+                
+                // 拖拽事件
+                bubbleElement.addEventListener('mousedown', startDrag);
+                
+                gameBoard.appendChild(bubbleElement);
+                
+                // 保存DOM引用到bubbles数组
+                bubbles[index].element = bubbleElement;
+            });
+            
+            // 重置游戏状态
+            selectedBubbles = [];
+            matchedPairs = 0;
+            
+            // 更新UI
+            document.getElementById('matched-count').textContent = matchedPairs;
+            document.getElementById('total-count').textContent = totalPairs;
+        }
+        
+        // 选择泡泡
+        function selectBubble(bubble) {
+            // 如果泡泡已匹配，则忽略
+            if (bubble.classList.contains('matched')) {
+                return;
+            }
+            
+            // 如果已经选中了两个泡泡，则忽略
+            if (selectedBubbles.length >= 2) {
+                return;
+            }
+            
+            // 如果点击的是已经选中的泡泡，则取消选择
+            const selectedIndex = selectedBubbles.indexOf(bubble);
+            if (selectedIndex !== -1) {
+                bubble.classList.remove('selected');
+                selectedBubbles.splice(selectedIndex, 1);
+                return;
+            }
+            
+            // 选中泡泡
+            bubble.classList.add('selected');
+            selectedBubbles.push(bubble);
+            
+            // 如果选中了两个泡泡，检查是否匹配
+            if (selectedBubbles.length === 2) {
+                const bubble1 = selectedBubbles[0];
+                const bubble2 = selectedBubbles[1];
+                
+                // 检查是否匹配（pairId相同）
+                if (bubble1.dataset.pairId === bubble2.dataset.pairId) {
+                    // 匹配成功
+                    bubble1.classList.add('matched');
+                    bubble2.classList.add('matched');
+                    bubble1.classList.remove('selected');
+                    bubble2.classList.remove('selected');
+                    
+                    matchedPairs++;
+                    document.getElementById('matched-count').textContent = matchedPairs;
+                    
+                    // 显示含义提示
+                    setTimeout(() => {
+                        alert(`匹配成功！\n${bubble1.textContent} = ${bubble2.textContent}\n含义：${bubble1.dataset.meaning}`);
+                    }, 300);
+                    
+                    // 检查是否完成游戏
+                    if (matchedPairs === totalPairs) {
+                        setTimeout(() => {
+                            alert('恭喜你！你已成功配对所有中西俚语！');
+                        }, 500);
+                    }
+                } else {
+                    // 匹配失败，0.5秒后取消选中
+                    setTimeout(() => {
+                        bubble1.classList.remove('selected');
+                        bubble2.classList.remove('selected');
+                    }, 500);
+                }
+                
+                selectedBubbles = [];
+            }
+        }
+        
+        // 拖拽功能
+        function startDrag(e) {
+            e.preventDefault();
+            isDragging = true;
+            dragBubble = e.target;
+            
+            // 计算鼠标相对于泡泡的偏移量
+            const rect = dragBubble.getBoundingClientRect();
+            dragOffsetX = e.clientX - rect.left;
+            dragOffsetY = e.clientY - rect.top;
+            
+            // 设置z-index使拖拽的泡泡在最上层
+            dragBubble.style.zIndex = '100';
+            
+            document.addEventListener('mousemove', drag);
+            document.addEventListener('mouseup', stopDrag);
+        }
+        
+        function drag(e) {
+            if (!isDragging) return;
+            
+            const gameBoard = document.getElementById('game-board');
+            const gameRect = gameBoard.getBoundingClientRect();
+            const bubbleSize = dragBubble.clientWidth;
+            
+            // 计算新位置，确保不超出边界
+            let newX = e.clientX - gameRect.left - dragOffsetX;
+            let newY = e.clientY - gameRect.top - dragOffsetY;
+            
+            // 边界检查
+            newX = Math.max(0, Math.min(newX, gameRect.width - bubbleSize));
+            newY = Math.max(0, Math.min(newY, gameRect.height - bubbleSize));
+            
+            dragBubble.style.left = `${newX}px`;
+            dragBubble.style.top = `${newY}px`;
+        }
+        
+        function stopDrag() {
+            if (!isDragging) return;
+            
+            isDragging = false;
+            if (dragBubble) {
+                dragBubble.style.zIndex = '';
+                dragBubble = null;
+            }
+            
+            document.removeEventListener('mousemove', drag);
+            document.removeEventListener('mouseup', stopDrag);
+        }
+        
+        // 重置游戏
+        function resetGame() {
+            initGame();
+        }
+        
+        // 初始化游戏
+        window.onload = initGame;
+        window.addEventListener('resize', resetGame); // 窗口大小改变时重置游戏
+    </script>
+</body>
+</html>
